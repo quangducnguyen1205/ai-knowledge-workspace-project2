@@ -71,6 +71,12 @@ services:
         condition: service_healthy
       processing-redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.core.celery_app inspect ping --destination celery@$$(hostname) --timeout 5 | grep -q pong"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
 
   processing-test:
     build:
@@ -156,6 +162,12 @@ services:
     depends_on:
       workspace-core:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:5173/"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
 
 volumes:
   processing_postgres_data:
