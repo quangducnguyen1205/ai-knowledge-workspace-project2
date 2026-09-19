@@ -1,0 +1,165 @@
+name: ai-knowledge-workspace-project2
+
+services:
+  processing-db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: ${PROCESSING_DB_NAME:-userdb}
+      POSTGRES_USER: ${PROCESSING_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${PROCESSING_DB_PASSWORD:-postgres}
+    volumes:
+      - processing_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PROCESSING_DB_USER:-postgres} -d ${PROCESSING_DB_NAME:-userdb}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  processing-redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  processing-api:
+    build:
+      context: ./processing-service/backend
+      dockerfile: Dockerfile.project2
+      target: runtime
+    environment:
+      PYTHONPATH: /backend
+      DATABASE_URL: postgresql://${PROCESSING_DB_USER:-postgres}:${PROCESSING_DB_PASSWORD:-postgres}@processing-db:5432/${PROCESSING_DB_NAME:-userdb}
+      MEDIA_ROOT: /backend/media
+      CELERY_BROKER_URL: redis://processing-redis:6379/0
+      CELERY_RESULT_BACKEND: redis://processing-redis:6379/0
+    ports:
+      - "${FASTAPI_PORT:-8000}:8000"
+    volumes:
+      - processing_media:/backend/media
+    depends_on:
+      processing-db:
+        condition: service_healthy
+      processing-redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+
+  processing-worker:
+    build:
+      context: ./processing-service/backend
+      dockerfile: Dockerfile.project2
+      target: runtime
+    command: celery -A app.core.celery_app worker --loglevel=info --concurrency=1
+    environment:
+      PYTHONPATH: /backend
+      DATABASE_URL: postgresql://${PROCESSING_DB_USER:-postgres}:${PROCESSING_DB_PASSWORD:-postgres}@processing-db:5432/${PROCESSING_DB_NAME:-userdb}
+      MEDIA_ROOT: /backend/media
+      CELERY_BROKER_URL: redis://processing-redis:6379/0
+      CELERY_RESULT_BACKEND: redis://processing-redis:6379/0
+      CELERY_WORKER_PREFETCH_MULTIPLIER: 1
+    volumes:
+      - processing_media:/backend/media
+      - whisper_model_cache:/home/appuser/.cache/whisper
+    depends_on:
+      processing-db:
+        condition: service_healthy
+      processing-redis:
+        condition: service_healthy
+
+  processing-test:
+    build:
+      context: ./processing-service/backend
+      dockerfile: Dockerfile.project2
+      target: test
+    environment:
+      PYTHONPATH: /backend
+      DATABASE_URL: sqlite:///./test.db
+      CELERY_BROKER_URL: memory://
+      CELERY_RESULT_BACKEND: cache+memory://
+      MEDIA_ROOT: /backend/test_media
+    command: pytest -v --assert=plain
+    profiles: ["test"]
+
+  workspace-db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: ${WORKSPACE_DB_NAME:-workspace_core}
+      POSTGRES_USER: ${WORKSPACE_DB_USER:-workspace_core}
+      POSTGRES_PASSWORD: ${WORKSPACE_DB_PASSWORD:-workspace_core}
+    volumes:
+      - workspace_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${WORKSPACE_DB_USER:-workspace_core} -d ${WORKSPACE_DB_NAME:-workspace_core}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.1
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    ports:
+      - "${ELASTICSEARCH_PORT:-9201}:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  workspace-core:
+    build:
+      context: ./spring-product-core/services/workspace-core
+      dockerfile: Dockerfile.project2
+    environment:
+      SERVER_PORT: 8081
+      WORKSPACE_CORE_POSTGRES_HOST: workspace-db
+      WORKSPACE_CORE_POSTGRES_PORT: 5432
+      WORKSPACE_CORE_POSTGRES_DB: ${WORKSPACE_DB_NAME:-workspace_core}
+      WORKSPACE_CORE_POSTGRES_USER: ${WORKSPACE_DB_USER:-workspace_core}
+      WORKSPACE_CORE_POSTGRES_PASSWORD: ${WORKSPACE_DB_PASSWORD:-workspace_core}
+      FASTAPI_BASE_URL: http://processing-api:8000
+      ELASTICSEARCH_BASE_URL: http://elasticsearch:9200
+      CURRENT_USER_DEV_FALLBACK_ENABLED: "true"
+    ports:
+      - "${SPRING_PORT:-8081}:8081"
+    depends_on:
+      processing-api:
+        condition: service_healthy
+      workspace-db:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 15s
+
+  frontend:
+    build:
+      context: ./frontend
+    command: npm run dev -- --host 0.0.0.0 --port 5173 --mode project2
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    depends_on:
+      workspace-core:
+        condition: service_healthy
+
+volumes:
+  processing_postgres_data:
+  processing_media:
+  whisper_model_cache:
+  workspace_postgres_data:
+  elasticsearch_data:

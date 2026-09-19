@@ -1,0 +1,33 @@
+# macOS
+.DS_Store
+
+# IDEs
+.idea/
+.vscode/
+
+# Logs
+*.log
+
+# Environment files
+.env
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+
+# Java
+target/
+build/
+out/
+*.class
+
+# Node
+node_modules/
+
+# Private local notes
+.private-learning-notes/
+
+/tmp/

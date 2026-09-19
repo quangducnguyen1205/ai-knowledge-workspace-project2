@@ -1,0 +1,10 @@
+.env
+.DS_Store
+**/target/
+**/node_modules/
+**/dist/
+**/__pycache__/
+**/.pytest_cache/
+processing-service/backend/media/*
+!processing-service/backend/media/.gitkeep
+

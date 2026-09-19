@@ -1,0 +1,77 @@
+services:
+  backend:
+    image: demofirstbackend-python:latest
+    build:
+      context: ./backend
+      target: runtime
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - redis
+    environment:
+      PYTHONPATH: /backend
+      DATABASE_URL: ${DATABASE_URL}
+      MEDIA_ROOT: /backend/media
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+    env_file:
+      - ${APP_ENV_FILE:-.env}
+    volumes:
+      - ./backend:/backend
+      - ./backend/media:/backend/media
+
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 
+
+  db:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=userdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  worker:
+    image: demofirstbackend-python:latest
+    depends_on:
+      - db
+      - redis
+    environment:
+      PYTHONPATH: /backend
+      DATABASE_URL: ${DATABASE_URL}
+      MEDIA_ROOT: /backend/media
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+      CELERY_WORKER_PREFETCH_MULTIPLIER: ${CELERY_WORKER_PREFETCH_MULTIPLIER:-1}
+    env_file:
+      - ${APP_ENV_FILE:-.env}
+    volumes:
+      - ./backend:/backend
+      - ./backend/media:/backend/media
+    command: celery -A app.core.celery_app worker --loglevel=info --concurrency=${CELERY_WORKER_CONCURRENCY:-1}
+
+  test:
+    build:
+      context: ./backend
+      target: test
+    environment:
+      PYTHONPATH: /backend
+      DATABASE_URL: "sqlite:///./test.db"
+      CELERY_BROKER_URL: "memory://"
+      CELERY_RESULT_BACKEND: "cache+memory://"
+      MEDIA_ROOT: "/backend/test_media"
+    # No volumes to avoid macOS FS lock issues; use image filesystem
+    command: sh -c "PYTHONPATH=. pytest -v --assert=plain"
+    # No dependencies; pure in-container test harness
+    profiles: [test]
+
+volumes:
+  postgres_data:

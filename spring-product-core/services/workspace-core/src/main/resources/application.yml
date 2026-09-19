@@ -1,0 +1,43 @@
+spring:
+  application:
+    name: workspace-core
+  datasource:
+    url: jdbc:postgresql://${WORKSPACE_CORE_POSTGRES_HOST:localhost}:${WORKSPACE_CORE_POSTGRES_PORT:5434}/${WORKSPACE_CORE_POSTGRES_DB:workspace_core}
+    username: ${WORKSPACE_CORE_POSTGRES_USER:workspace_core}
+    password: ${WORKSPACE_CORE_POSTGRES_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  servlet:
+    multipart:
+      max-file-size: ${WORKSPACE_CORE_MAX_FILE_SIZE:200MB}
+      max-request-size: ${WORKSPACE_CORE_MAX_REQUEST_SIZE:200MB}
+
+server:
+  port: ${SERVER_PORT:8081}
+
+workspace:
+  default-id: ${DEFAULT_WORKSPACE_ID:00000000-0000-0000-0000-000000000001}
+  default-name: ${DEFAULT_WORKSPACE_NAME:Default Workspace}
+
+current-user:
+  header-name: ${CURRENT_USER_HEADER_NAME:X-Current-User-Id}
+  session-attribute-name: ${CURRENT_USER_SESSION_ATTRIBUTE:CURRENT_USER_ID}
+  default-id: ${CURRENT_USER_ID:local-dev-user}
+  dev-fallback-enabled: ${CURRENT_USER_DEV_FALLBACK_ENABLED:true}
+
+integration:
+  fastapi:
+    base-url: ${FASTAPI_BASE_URL:http://localhost:8000}
+    connect-timeout: ${FASTAPI_CONNECT_TIMEOUT:5s}
+    read-timeout: ${FASTAPI_READ_TIMEOUT:30s}
+  elasticsearch:
+    base-url: ${ELASTICSEARCH_BASE_URL:http://localhost:9201}
+    connect-timeout: ${ELASTICSEARCH_CONNECT_TIMEOUT:3s}
+    read-timeout: ${ELASTICSEARCH_READ_TIMEOUT:10s}
+    transcript-index-name: ${ELASTICSEARCH_TRANSCRIPT_INDEX_NAME:asset-transcript-rows}
